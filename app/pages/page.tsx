@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, Suspense } from "react"
 import DashboardLayout from "@/components/dashboard/layout/DashboardLayout"
 import PageView from "@/components/pages/PageView"
 import { usePageState } from "@/hooks/usePageState"
@@ -10,7 +10,8 @@ import { ChatConversation } from "@/lib/chat-storage"
 import { PageConversation } from "@/lib/page-storage"
 import SettingsPopup from "@/components/dashboard/ui/SettingsPopup"
 
-export default function Page() {
+// Wrapper component that handles search params with Suspense
+function PageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const pageId = searchParams.get('page')
@@ -90,5 +91,13 @@ export default function Page() {
       </DashboardLayout>
       <SettingsPopup isOpen={showSettings} onClose={() => setShowSettings(false)} />
     </>
+  )
+}
+
+export default function Page() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <PageContent />
+    </Suspense>
   )
 }
