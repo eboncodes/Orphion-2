@@ -220,16 +220,13 @@ export class AuthService {
   }
 
   static async signInWithGoogle(): Promise<void> {
-    // Get the current origin, ensuring it works in both client and server environments
-    const currentOrigin = typeof window !== 'undefined'
-      ? window.location.origin
-      : (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000')
-
-    const redirectUrl = `${currentOrigin}/auth/callback`
+    // Use the production URL directly for OAuth redirect
+    const redirectUrl = 'https://orphion-2.vercel.app/auth/callback'
 
     console.log('Google OAuth redirect URL:', redirectUrl)
+    console.log('Current window location:', typeof window !== 'undefined' ? window.location.origin : 'N/A')
 
-    const { error } = await supabase.auth.signInWithOAuth({
+    const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
         redirectTo: redirectUrl,
@@ -242,8 +239,15 @@ export class AuthService {
 
     if (error) {
       console.error('Google OAuth error:', error)
-      throw new Error(error.message)
+      console.error('Error details:', {
+        message: error.message,
+        status: error.status,
+        details: error
+      })
+      throw new Error(`Google OAuth failed: ${error.message}`)
     }
+
+    console.log('OAuth initiated successfully:', data?.url ? 'Redirect URL generated' : 'No redirect URL')
   }
 
   static async resendVerificationEmail(email: string): Promise<void> {
