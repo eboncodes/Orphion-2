@@ -9,21 +9,24 @@ export default function AuthCallback() {
   useEffect(() => {
     const handleAuthCallback = async () => {
       try {
+        console.log('=== OAUTH CALLBACK DEBUG ===')
+        console.log('Current URL:', typeof window !== 'undefined' ? window.location.href : 'N/A')
+        console.log('Current Origin:', typeof window !== 'undefined' ? window.location.origin : 'N/A')
+        console.log('Search params:', typeof window !== 'undefined' ? window.location.search : 'N/A')
+
         // Add a small delay to ensure auth state is properly set
         await new Promise(resolve => setTimeout(resolve, 100))
 
-        // Get the current URL to determine if we're in production or development
-        const currentOrigin = typeof window !== 'undefined' ? window.location.origin : ''
+        // Force redirect to production dashboard
+        const productionUrl = 'https://orphion-2.vercel.app/dashboard'
+        console.log('Redirecting to:', productionUrl)
 
-        // Redirect to dashboard after auth is complete
-        // Use relative path to ensure it works in both dev and production
-        router.push('/dashboard')
+        window.location.href = productionUrl
 
-        console.log('OAuth callback completed, redirecting to dashboard from:', currentOrigin)
       } catch (error) {
         console.error('Error in auth callback:', error)
-        // Fallback redirect
-        router.push('/dashboard')
+        // Force redirect even on error
+        window.location.href = 'https://orphion-2.vercel.app/dashboard'
       }
     }
 
