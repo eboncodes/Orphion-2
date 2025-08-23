@@ -220,14 +220,28 @@ export class AuthService {
   }
 
   static async signInWithGoogle(): Promise<void> {
+    // Get the current origin, ensuring it works in both client and server environments
+    const currentOrigin = typeof window !== 'undefined'
+      ? window.location.origin
+      : (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000')
+
+    const redirectUrl = `${currentOrigin}/auth/callback`
+
+    console.log('Google OAuth redirect URL:', redirectUrl)
+
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
+        redirectTo: redirectUrl,
+        queryParams: {
+          access_type: 'offline',
+          prompt: 'consent'
+        }
       },
     })
 
     if (error) {
+      console.error('Google OAuth error:', error)
       throw new Error(error.message)
     }
   }
