@@ -70,9 +70,10 @@ const config: Config = {
   			sm: 'calc(var(--radius) - 4px)'
   		},
   		
-  		fontFamily: {
-  			'bangla': ['var(--font-bangla)', 'sans-serif']
-  		}
+  				fontFamily: {
+			'bangla': ['var(--font-bangla)', 'sans-serif'],
+			'sans': ['-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', 'sans-serif']
+		}
   	}
   },
   plugins: [],

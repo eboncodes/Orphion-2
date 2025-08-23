@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { orphionAIService } from '@/app/services/OrphionAIService'
 
-interface SearchResults {
+export interface SearchResults {
   answer: string
   sources: Array<{
     title: string
@@ -17,7 +17,6 @@ interface UseWebSearchReturn {
   searchResults: SearchResults | null
   isSearching: boolean
   searchWeb: (query: string) => Promise<SearchResults>
-  shouldUseSearch: (message: string) => boolean
 }
 
 export function useWebSearch(): UseWebSearchReturn {
@@ -38,22 +37,9 @@ export function useWebSearch(): UseWebSearchReturn {
     }
   }
 
-  const shouldUseSearch = (message: string): boolean => {
-    // Auto-detect if search is needed (for questions about current events, recent information, etc.)
-    const searchKeywords = [
-      'latest', 'recent', 'current', 'today', 'news', 'update', 
-      '2024', '2023', 'trending', 'popular', 'what is', 'who is',
-      'when did', 'where is', 'how to', 'best', 'top', 'latest news'
-    ]
-    
-    const lowerMessage = message.toLowerCase()
-    return searchKeywords.some(keyword => lowerMessage.includes(keyword))
-  }
-
   return {
     searchResults,
     isSearching,
-    searchWeb,
-    shouldUseSearch
+    searchWeb
   }
 } 

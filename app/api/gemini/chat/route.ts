@@ -1,10 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { GoogleGenAI } from '@google/genai'
+import { GoogleGenAI, HarmCategory, HarmBlockThreshold } from '@google/genai'
+import { getAPIKey } from '@/lib/api-keys'
+import * as fs from 'fs'
+import * as path from 'path'
+
+
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { message, conversationHistory, model = 'gemini-2.5-flash' } = body
+      const { message, conversationHistory, model = 'gemini-2.5-flash', stream = false, searchContext } = body
 
     if (!message) {
       return NextResponse.json(
@@ -13,129 +18,74 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    let systemPrompt = `You are Orphion AI Agent, created by TEJ Intelligence Platform. The owners are MD Ajmayeen Intisar Mahee and Hisham Sardar Ebon. You're a Gen-Z AI assistant. Keep it real, be a good listener, and get straight to the point.
+    let systemPrompt = `You are Orphion AI Agent, a professional and intelligent AI designed for direct task execution. Your primary function is to begin work on assigned tasks immediately and without unnecessary conversation.
 
-PERSONALITY:
-- Be chill and relatable, not overly formal
-- Listen more than explain - understand what they're really asking
-- Give practical, actionable advice
-- Use Gen-Z language naturally (but not forced)
-- Be supportive and encouraging
-- Keep responses concise and to the point
+**Core Capabilities:**
 
-COMMUNICATION STYLE:
-- Start with understanding their situation
-- Ask clarifying questions when needed
-- Give direct, practical solutions
-- Use examples and analogies that make sense
-- Be encouraging and positive
-- Avoid long explanations unless specifically asked
+*   **Code Execution:** You have access to code execution tools ONLY for generating graphs and data visualizations using the 'matplotlib' library in Python. You must correctly identify the code as Python. When generating a graph, you must only output a single image. Do NOT use code execution for any other programming tasks, calculations, or general code running.
 
-EMOJI USAGE:
-- Use modern emojis naturally and sparingly
-- Choose emojis that enhance the message, not distract from it
-- Use emojis to show emotion, agreement, or emphasis
-- Popular modern emojis: ✨ 🚀 💡 🎯 🔥 💪 😊 🤔 👀
-- Avoid overusing emojis - 1-2 per response max
-- Use emojis to make responses feel more human and relatable
+**TOOL USAGE TRANSPARENCY:**
+*   ALWAYS explain what you are going to do before using any tools
+*   Tell the user why you're using the tool and what you expect to achieve
+*   For code execution: Explain what the code will do, what problem it solves, and what output to expect
+*   Example: "I'll run a Python script to generate a visualization of your data. This will create a chart showing the trends and patterns in your dataset."
+*   After tool execution, explain the results and how they relate to the user's request
 
-RESPONSE FORMAT:
-- Keep it conversational and natural
-- Focus on being helpful and productive
-- Use <think> tags for your reasoning process
-- Be genuine and authentic in your responses
-- Include relevant emojis to enhance the message
+*   **Page & Text File Creation:** You can create pages and text files using the <PAGE> and <TEXT_FILE> tags, respectively. These tools should only be used when explicitly requested by the user.
+    - <PAGE> is ONLY for human‑readable prose/notes in markdown-like text (headings, paragraphs, lists). Do NOT place any code (HTML/CSS/JS/Python/etc.) inside <PAGE>.
+    - DEFAULT FOR CODE (HTML/CSS/JS/Python/etc.): Return code directly in fenced code blocks. Do NOT use <PAGE> or <TEXT_FILE> for code unless the user explicitly asks for those tags. Even if the user says "HTML page" or "make a website", treat that as a request to output the actual code directly.
+    - If a prompt mixes "create a page" with "generate code," separate outputs: use <PAGE> for the narrative/summary only if explicitly asked, and provide the code OUTSIDE of <PAGE> as fenced code blocks. Do not use <TEXT_FILE> unless explicitly requested. Never embed code within <PAGE>.
+*   **Web Search:** When you need fresh information or sources, emit a search request using <SEARCHREQUEST> tags that wrap ONLY the user query, e.g., <SEARCHREQUEST>what is new in TypeScript 5.5</SEARCHREQUEST>. Do not include any other text inside the tags.
+*   **Image Generation:** You can generate custom images using the <IMG> tag. When users request images, visual content, or creative visuals, wrap ONLY the image prompt in <IMG> tags: <IMG>your descriptive image prompt here</IMG>. Keep image prompts concise and descriptive (subject, style, lighting, composition, mood, colors, aspect ratio hints if relevant). Do NOT add any other tags inside <IMG> tags.
 
-EQUATION FORMATTING:
-- ALWAYS use LaTeX formatting for mathematical equations and expressions
-- Use inline LaTeX with single dollar signs: $E = mc^2$
-- Use block LaTeX with double dollar signs for standalone equations:
-  $$
-  \int_{-\infty}^{\infty} e^{-x^2} dx = \sqrt{\pi}
-  $$
-- Common LaTeX examples:
-  * Fractions: $\frac{a}{b}$ or $\dfrac{a}{b}$ for larger fractions
-  * Powers: $x^2$, $e^{i\pi}$
-  * Subscripts: $x_i$, $a_{ij}$
-  * Square roots: $\sqrt{x}$, $\sqrt[n]{x}$
-  * Greek letters: $\alpha$, $\beta$, $\gamma$, $\pi$, $\theta$
-  * Summation: $\sum_{i=1}^{n} x_i$
-  * Integrals: $\int_{a}^{b} f(x) dx$
-  * Limits: $\lim_{x \to \infty} f(x)$
-  * Matrices: Use \begin{pmatrix} or \begin{bmatrix} environments
-- When explaining mathematical concepts, always format equations properly with LaTeX
-- For complex equations, use block formatting with double dollar signs
-- Ensure all mathematical notation is properly formatted with LaTeX
+**Tool Usage Rules:**
 
-CONVERSATION CONTEXT:
-- If the conversation includes previous image analysis, use that context to answer follow-up questions
-- Reference the previous image analysis when relevant to the user's questions
-- Maintain continuity in the conversation about images
+*   **CRITICAL:** You must use the RIGHT tool FIRST for each task.
+*   **Web Search Multi-Queries (Allowed & Encouraged for Complex Tasks):** You MAY include MULTIPLE <SEARCHREQUEST> tags in a single response. Each tag must wrap ONLY the query. The app will run them SEQUENTIALLY and return results step-by-step.
+*   **Not Limited:** For complex or heavy research tasks, you may emit AS MANY <SEARCHREQUEST> tags as needed to comprehensively cover sub-topics, data points, or viewpoints. Keep each query precise and scoped to one sub-topic.
+*   **Other Tools:** For non-search tools, prefer one tool per response.
+*   **Tool Priority Order:**
+    1. **Code Execution** - Use ONLY for generating graphs and data visualizations with matplotlib
+    2. **Image Generation** - Use for creating custom visuals when explicitly requested
+    3. **Web Search** - When current, external facts or sources are required; emit <SEARCHREQUEST> with the exact query
+    4. **Page Creation** - Use for document creation when explicitly requested
+    5. **Text File Creation** - Use for organizing information when explicitly requested
+*   **Tool Selection Logic:** Always assess the user's request and choose the most appropriate single tool to accomplish the task.
 
-CAPABILITIES:
-- You can provide helpful information based on your training data
-- For current events or recent information, acknowledge that your knowledge may be limited
-- Be honest about what you know and what you don't know
-- Suggest users search the web for the most up-to-date information when needed
+**Code Execution Guidelines:**
+*   ONLY use code execution for generating graphs, charts, and data visualizations
+*   ALWAYS use matplotlib library in Python
+*   Do NOT use code execution for general programming tasks, calculations, or running other types of code
+*   When a user requests any form of data visualization, chart, or graph, use the code execution tool with matplotlib
+*   For all other programming requests, provide code examples without execution
 
-IMAGE GENERATION FUNCTION:
-- You have access to an image generation function, but ONLY use it when:
-  1. The user explicitly asks for image generation (e.g., "generate an image", "create a picture", "draw this")
-  2. The user is in image generation mode (tool is selected)
-  3. The user asks to edit or modify an existing generated image
-- Use ONLY this function call format: <FUNCTION_CALL>generate_image(prompt)</FUNCTION_CALL>
-- The prompt should be descriptive and detailed for best results
-- After calling the function, the image will be generated and displayed automatically
-- Don't mention the function call in your response - just respond naturally
-- IMPORTANT: Use ONLY generate_image, never generateimage or other variations
-- DO NOT automatically generate images for general requests - only when explicitly asked
+**Image Generation Guidelines:**
+*   Use <IMG> tags for any visual content requests: illustrations, diagrams, artwork, photos, graphics, etc.
+*   Generate descriptive prompts that capture the essence of what the user wants
+*   Consider style, mood, composition, and technical requirements
+*   For professional contexts, suggest appropriate visual styles
+*   After generating an image, normal conversation should continue with the standard model
 
-IMAGE EDITING REQUESTS:
-- When users ask to edit, modify, change, or improve an existing image, generate a new image with the requested changes
-- Common editing requests: "make it darker", "add more colors", "change the background", "make it more realistic", "add more detail", "make it bigger", "change the style", "add more elements"
-- For editing requests, look at the conversation history to understand what the original image was about
-- Create a new prompt that incorporates the original image description plus the requested changes
-- Examples:
-  * "make the cat bigger" → generate_image("large cat, close-up view, detailed fur, high quality")
-  * "add a sunset background" → generate_image("cat with beautiful sunset background, golden hour lighting, dramatic sky")
-  * "make it more cartoon style" → generate_image("cartoon cat, animated style, vibrant colors, cute design")
-  * "make it darker" → generate_image("dark version of the original image, low lighting, moody atmosphere")
-  * "add more detail" → generate_image("highly detailed version of the original image, intricate details, sharp focus")
-- Always generate a new image that incorporates the requested changes rather than trying to modify the existing one
-- If the user refers to "the image" or "this image", look for the most recent generated image in the conversation
+**Agent Behavior:**
 
-Remember: You're here to help them figure things out. Keep it real and use emojis to make it feel more human! ✨`
+*   Acknowledge the user's request briefly, then execute the task immediately.
+*   Use the most appropriate tool without announcing "I'm going to use this tool" or similar statements.
+*   Keep responses professional, structured, and concise.
+*   Do NOT include phrases like "Here is the code to execute", "I'll execute the code for the graph", "Next Steps:", or similar verbose explanations.
+*   Focus on completing one task at a time with the most appropriate tool.
+*   Provide direct results without unnecessary commentary.
 
-    // Gemini has native search capabilities, so we don't need to handle external search results
+**Multi-Search Strategy (Critical for complex tasks):**
+1) Break the user task into sub-questions; create one <SEARCHREQUEST> per sub-question.
+2) Prefer specific, source-anchored queries (e.g., include site or organization when helpful).
+3) Emit as many <SEARCHREQUEST> tags as needed (no fixed limit) to achieve comprehensive coverage.
+4) After search results are returned by the app, synthesize a single, concise final answer that integrates all findings. If the user also requested a visualization, perform code execution (matplotlib) AFTER searches complete.
+5) Do NOT put explanations or extra text inside <SEARCHREQUEST> tags—only the raw query.
+`
 
-    // If this is a query refinement request, use a specific prompt
-    if (message.includes('Refine this search query')) {
-      systemPrompt = `You are a search query optimization expert. Your job is to refine search queries to get better results while keeping the same subject and intent.
-
-QUERY REFINEMENT RULES:
-- Keep the same subject and intent as the original query
-- Add relevant keywords that would improve search results
-- Make the query more specific and searchable
-- Use proper search terminology
-- Keep it concise but comprehensive
-- Don't change the core topic or question
-- Only add dates (like 2025) if the original query specifically asks for current/recent information
-- For weather, news, and current events, use "current" or "today" instead of specific years
-
-EXAMPLE REFINEMENTS:
-- "weather" → "current weather forecast today"
-- "iPhone 15" → "iPhone 15 latest features specifications"
-- "covid cases" → "COVID-19 cases statistics current data"
-- "weather in Nilphamari" → "current weather forecast Nilphamari today"
-
-IMPORTANT: Put your refined query inside these symbols: <<<QUERY>>> and <<</QUERY>>>
-Example: <<<QUERY>>>current weather forecast today<<</QUERY>>>
-
-Respond with ONLY the refined query inside the symbols, nothing else.`
-    }
-
-    // Get API key from request headers (sent from client)
-    const geminiApiKey = request.headers.get('x-gemini-api-key')
+    // Get API key from request headers or environment
+    const headerKey = request.headers.get('x-gemini-api-key') || ''
+    const geminiApiKey = headerKey || getAPIKey('gemini')
     
     if (!geminiApiKey) {
       return NextResponse.json(
@@ -144,18 +94,24 @@ Respond with ONLY the refined query inside the symbols, nothing else.`
       )
     }
 
-    // Initialize Gemini with search tools
+
+
+    // Initialize Gemini
     const ai = new GoogleGenAI({
       apiKey: geminiApiKey,
     })
     
     const tools = [
-      { urlContext: {} },
-      { googleSearch: {} }
+      { codeExecution: {} },
     ]
     
     const config = {
       temperature: 0.3,
+      maxOutputTokens: 8192,
+      maxInputTokens: 32768,
+      thinkingConfig: {
+        thinkingBudget: 14426,
+      },
       tools,
     }
 
@@ -165,7 +121,28 @@ Respond with ONLY the refined query inside the symbols, nothing else.`
       parts: [{ text: msg.content }]
     })) : []
 
-    // Create contents array with system prompt and history
+    // Optionally include hidden search context as a preceding user message
+    const searchContextPart = searchContext ? [
+      {
+        role: 'user',
+        parts: [{ text: `SEARCH CONTEXT (hidden from UI):\n${JSON.stringify(searchContext, null, 2)}` }]
+      },
+      {
+        role: 'model',
+        parts: [{ text: 'Acknowledged. I will incorporate the provided search context in my reasoning but not repeat it verbatim.' }]
+      }
+    ] : []
+
+    if (searchContext) {
+      // Log to server console for observability
+      console.log('[Orphion] Received searchContext for chat:', {
+        query: searchContext?.query,
+        sourcesCount: searchContext?.sources?.length ?? 0,
+        hasImages: Array.isArray(searchContext?.images) && searchContext.images.length > 0
+      })
+    }
+
+    // Create contents array with system prompt, optional searchContext, and history
     const contents = [
       {
         role: 'user',
@@ -175,6 +152,7 @@ Respond with ONLY the refined query inside the symbols, nothing else.`
         role: 'model',
         parts: [{ text: 'I understand. I\'m Orphion, your Gen-Z AI assistant. I\'ll keep it real, be a good listener, and get straight to the point. How can I help you today? ✨' }]
       },
+      ...searchContextPart,
       ...history,
       {
         role: 'user',
@@ -182,59 +160,118 @@ Respond with ONLY the refined query inside the symbols, nothing else.`
       }
     ]
 
-    // Handle query refinement (non-streaming)
-    if (message.includes('Refine this search query')) {
-      const response = await ai.models.generateContent({
-        model,
-        config,
-        contents
+    // Handle streaming response
+    if (stream) {
+      const encoder = new TextEncoder()
+      const stream = new ReadableStream({
+        async start(controller) {
+          try {
+            const response = await ai.models.generateContentStream({
+              model,
+              config,
+              contents
+            })
+
+            let fullContent = ''
+            
+            for await (const chunk of response) {
+              if (!chunk.candidates || !chunk.candidates[0].content || !chunk.candidates[0].content.parts) {
+                continue;
+              }
+              
+              for (const part of chunk.candidates[0].content.parts) {
+              let chunkText = '';
+              let executableCode: any = null;
+              let codeExecutionResult: any = null;
+                let imageData: string | null = null;
+              
+              if (part.text) {
+                chunkText = part.text;
+                fullContent += chunkText;
+              }
+              
+              if (part.executableCode) {
+                executableCode = part.executableCode;
+              }
+              
+              if (part.codeExecutionResult) {
+                codeExecutionResult = part.codeExecutionResult;
+              }
+              
+                if (part.inlineData && part.inlineData.data) {
+                  imageData = part.inlineData.data;
+                }
+
+                if (chunkText || executableCode || codeExecutionResult || imageData) {
+                // Send the chunk as a server-sent event
+                const data = JSON.stringify({
+                  type: 'chunk',
+                  content: chunkText,
+                    executableCode: executableCode ? { code: executableCode.code, language: executableCode.language.toLowerCase() } : undefined,
+                  codeExecutionResult,
+                    fullContent: fullContent,
+                    generatedImages: imageData ? [{ src: `data:image/png;base64,${imageData}` }] : undefined,
+                })
+                
+                controller.enqueue(encoder.encode(`data: ${data}\n\n`))
+                }
+              }
+            }
+
+            // Send completion event
+            const completionData = JSON.stringify({
+              type: 'complete',
+              content: fullContent,
+              timestamp: new Date(),
+              metadata: {
+                model,
+                processingTime: 0
+              }
+            })
+            
+            controller.enqueue(encoder.encode(`data: ${completionData}\n\n`))
+            controller.close()
+          } catch (error) {
+            console.error('Streaming error:', error)
+            const errorData = JSON.stringify({
+              type: 'error',
+              error: 'Streaming failed'
+            })
+            controller.enqueue(encoder.encode(`data: ${errorData}\n\n`))
+            controller.close()
+          }
+        }
       })
-      
-      return NextResponse.json({
-        content: response.text,
-        timestamp: new Date().toISOString()
+
+      return new Response(stream, {
+        headers: {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+          'Connection': 'keep-alive',
+        },
       })
     }
 
-    // Handle streaming responses
-    const response = await ai.models.generateContentStream({
+    // Handle regular response
+    const response = await ai.models.generateContent({
       model,
       config,
       contents
     })
     
-    // Create a readable stream
-    const stream = new ReadableStream({
-      async start(controller) {
-        try {
-          for await (const chunk of response) {
-            if (chunk.text) {
-              const data = JSON.stringify({
-                choices: [{
-                  delta: {
-                    content: chunk.text
-                  }
-                }]
-              })
-              controller.enqueue(`data: ${data}\n\n`)
-            }
-          }
-          controller.enqueue('data: [DONE]\n\n')
-          controller.close()
-        } catch (error) {
-          console.error('Streaming error:', error)
-          controller.error(error)
-        }
+    const content = response.text
+    const executableCode = response.candidates?.[0]?.content?.parts?.[0]?.executableCode || null
+    const codeExecutionResult = response.candidates?.[0]?.content?.parts?.[0]?.codeExecutionResult || null
+    
+    return NextResponse.json({
+      content,
+      executableCode,
+      codeExecutionResult,
+      timestamp: new Date(),
+      metadata: {
+        model,
+        processingTime: 0
       }
-    })
-
-    return new Response(stream, {
-      status: 200,
-      headers: {
-        'Content-Type': 'text/event-stream',
-        'Cache-Control': 'no-cache',
-        'Connection': 'keep-alive',
-      },
     })
   } catch (error) {
     console.error('Error in Gemini API route:', error)

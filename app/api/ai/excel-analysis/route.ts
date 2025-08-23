@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import * as XLSX from 'xlsx'
+import { getAPIKey } from '@/lib/api-keys'
 
 export async function POST(request: NextRequest) {
   try {
@@ -125,7 +126,7 @@ export async function POST(request: NextRequest) {
     console.log('🤖 Step 2: Gemini processing data...')
     
     // Get API key from request headers (sent from client)
-    const geminiApiKey = request.headers.get('x-gemini-api-key')
+    const geminiApiKey = getAPIKey('gemini')
     
     if (!geminiApiKey) {
       return NextResponse.json(
@@ -163,7 +164,9 @@ Please provide a helpful response to the user's question about this file.`
 
     const result = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
-      contents: [{ role: 'user', parts: [{ text: processingPrompt }] }]
+      contents: [
+        { role: 'user', parts: [{ text: processingPrompt }] }
+      ]
     })
     const finalResponse = result.text || 'Unable to process file'
     

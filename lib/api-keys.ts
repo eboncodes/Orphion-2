@@ -3,38 +3,21 @@ export interface APIKeys {
 }
 
 export function getAPIKeys(): APIKeys {
-  if (typeof window === 'undefined') {
-    return {
-      gemini: ''
-    }
-  }
-
   return {
-    gemini: localStorage.getItem('gemini_api_key') || ''
+    // Prefer public key in client bundles; fall back to server env
+    gemini: process.env.NEXT_PUBLIC_GEMINI_API_KEY || process.env.GEMINI_API_KEY || ''
   }
 }
 
 export function isAPISetupComplete(): boolean {
-  if (typeof window === 'undefined') {
-    return false
-  }
-  
-  return localStorage.getItem('api_setup_complete') === 'true'
+  return !!(process.env.NEXT_PUBLIC_GEMINI_API_KEY || process.env.GEMINI_API_KEY)
 }
 
 export function clearAPIKeys(): void {
-  if (typeof window === 'undefined') {
-    return
-  }
-
-  localStorage.removeItem('gemini_api_key')
-  localStorage.removeItem('api_setup_complete')
+  // No longer needed with hardcoded keys
 }
 
 export function getAPIKey(service: keyof APIKeys): string {
-  if (typeof window === 'undefined') {
-    return ''
-  }
-  
-  return localStorage.getItem(`${service}_api_key`) || ''
+  const keys = getAPIKeys()
+  return keys[service] || ''
 } 

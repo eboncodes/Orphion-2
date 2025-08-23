@@ -24,6 +24,7 @@ export class OrphionAIError extends Error {
 export class OrphionAIService {
   private baseUrl: string
   private imageAnalysisUrl: string
+  private imageGenerationUrl: string
   private documentAnalysisUrl: string
   private pdfAnalysisUrl: string
   private excelAnalysisUrl: string
@@ -31,6 +32,7 @@ export class OrphionAIService {
   constructor(baseUrl: string = '/api/gemini', imageAnalysisUrl: string = '/api/ai/image-analysis', documentAnalysisUrl: string = '/api/ai/document-analysis', pdfAnalysisUrl: string = '/api/ai/pdf-analysis', excelAnalysisUrl: string = '/api/ai/excel-analysis') {
     this.baseUrl = baseUrl
     this.imageAnalysisUrl = imageAnalysisUrl
+    this.imageGenerationUrl = `${baseUrl}/image-generation`
     this.documentAnalysisUrl = documentAnalysisUrl
     this.pdfAnalysisUrl = pdfAnalysisUrl
     this.excelAnalysisUrl = excelAnalysisUrl
@@ -42,6 +44,74 @@ export class OrphionAIService {
     return {
       'Content-Type': 'application/json',
       'x-gemini-api-key': apiKeys.gemini
+    }
+  }
+
+  // Generate image(s) from prompt via Gemini image generation route
+  async generateImage(prompt: string): Promise<{ images: Array<{ src: string; alt?: string }>; text?: string }> {
+    try {
+      const response = await fetch(this.imageGenerationUrl, {
+        method: 'POST',
+        headers: this.getHeaders(),
+        body: JSON.stringify({ prompt })
+      })
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        this.handleApiError(response.status, errorText)
+      }
+
+      const data = await response.json()
+      const images = Array.isArray(data.images)
+        ? data.images.map((img: any, idx: number) => {
+            const mime = img.mimeType || 'image/png'
+            const src = `data:${mime};base64,${img.data}`
+            return { src, alt: `Generated image ${idx + 1}` }
+          })
+        : []
+
+      return { images, text: data.text }
+    } catch (error) {
+      if (error instanceof OrphionAIError) throw error
+      console.error('Image Generation Error:', error)
+      throw new OrphionAIError(
+        error instanceof Error ? error.message : 'Image generation failed',
+        'IMAGE_GENERATION_ERROR',
+        new Date()
+      )
+    }
+  }
+
+  async searchWeb(query: string): Promise<{ answer: string; sources: Array<{ title: string; url: string; content: string; score: number; published_date?: string | null }>; images?: Array<{ url: string; title?: string; alt?: string }>; query: string }> {
+    try {
+      const response = await fetch(`${this.baseUrl}/web-search`, {
+        method: 'POST',
+        headers: this.getHeaders(),
+        body: JSON.stringify({ query })
+      })
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        this.handleApiError(response.status, errorText)
+      }
+
+      const data = await response.json()
+      return {
+        answer: data.answer,
+        sources: data.sources,
+        images: data.images,
+        query: data.query
+      }
+    } catch (error) {
+      if (error instanceof OrphionAIError) {
+        throw error
+      }
+      console.error('Web Search Error:', error)
+      throw new OrphionAIError(
+        error instanceof Error ? error.message : 'Web search failed',
+        'WEB_SEARCH_ERROR',
+        new Date()
+      )
     }
   }
 
@@ -85,14 +155,21 @@ export class OrphionAIService {
     throw new OrphionAIError(userMessage, errorCode, new Date());
   }
 
-  async sendMessage(message: string): Promise<OrphionAIResponse> {
+  async sendMessage(message: string, model?: string, searchContext?: {
+    query: string
+    answer?: string
+    sources: Array<{ title: string; url: string; content: string; score?: number; published_date?: string | null }>
+    images?: Array<{ url: string; title?: string; alt?: string }>
+  }): Promise<OrphionAIResponse> {
     try {
       const response = await fetch(`${this.baseUrl}/chat`, {
         method: 'POST',
         headers: this.getHeaders(),
         body: JSON.stringify({
           message,
-          conversationHistory: []
+          conversationHistory: [],
+          ...(model ? { model } : {}),
+          ...(searchContext ? { searchContext } : {})
         })
       })
 
@@ -120,7 +197,17 @@ export class OrphionAIService {
     }
   }
 
-  async streamMessage(message: string, onChunk: (chunk: string) => void, conversationHistory: Array<{role: string, content: string}> = [], model: string = 'gemini-2.5-flash'): Promise<void> {
+
+
+
+
+    // Method to handle conversation context
+  async sendMessageWithContext(message: string, conversationHistory: Array<{role: string, content: string}>, model?: string, searchContext?: {
+    query: string
+    answer?: string
+    sources: Array<{ title: string; url: string; content: string; score?: number; published_date?: string | null }>
+    images?: Array<{ url: string; title?: string; alt?: string }>
+  }): Promise<OrphionAIResponse> {
     try {
       const response = await fetch(`${this.baseUrl}/chat`, {
         method: 'POST',
@@ -128,7 +215,8 @@ export class OrphionAIService {
         body: JSON.stringify({
           message,
           conversationHistory,
-          model
+          ...(model ? { model } : {}),
+          ...(searchContext ? { searchContext } : {})
         })
       })
 
@@ -137,132 +225,12 @@ export class OrphionAIService {
         this.handleApiError(response.status, errorText);
       }
 
-      // Handle streaming response (SSE format)
-      if (response.headers.get('Content-Type')?.includes('text/event-stream')) {
-        const reader = response.body?.getReader();
-        if (!reader) {
-          throw new Error('Response body is not readable');
-        }
-
-        let done = false;
-
-        while (!done) {
-          const { value, done: readerDone } = await reader.read();
-          done = readerDone;
-
-          if (value) {
-            const chunk = new TextDecoder().decode(value);
-            // Process SSE format: data: {"json":"content"}
-            const lines = chunk.split('\n');
-            for (const line of lines) {
-              if (line.startsWith('data:')) {
-                try {
-                  // Extract JSON from the data: prefix
-                  const jsonStr = line.substring(5).trim();
-                  if (jsonStr === '[DONE]') continue;
-                  
-                  const data = JSON.parse(jsonStr);
-                  if (data.choices && data.choices[0] && data.choices[0].delta && data.choices[0].delta.content) {
-                    onChunk(data.choices[0].delta.content);
-                  }
-                } catch (e) {
-                  console.warn('Error parsing SSE chunk:', e);
-                }
-              }
-            }
-          }
-        }
-      } else {
-        // Handle regular JSON response
-        const data = await response.json();
-        onChunk(data.content);
-      }
-    } catch (error) {
-      if (error instanceof OrphionAIError) {
-        throw error;
-      }
-              console.error('Gemini Stream Error:', error);
-      throw new OrphionAIError(
-        error instanceof Error ? error.message : 'Stream error occurred',
-        'STREAM_MESSAGE_ERROR',
-        new Date()
-      );
-    }
-  }
-
-
-
-  // Method to handle conversation context
-  async sendMessageWithContext(message: string, conversationHistory: Array<{role: string, content: string}>): Promise<OrphionAIResponse> {
-    try {
-      const response = await fetch(`${this.baseUrl}/chat`, {
-        method: 'POST',
-        headers: this.getHeaders(),
-        body: JSON.stringify({
-          message,
-          conversationHistory
-        })
-      })
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        this.handleApiError(response.status, errorText);
-      }
-
-      // Handle streaming response (SSE format)
-      if (response.headers.get('Content-Type')?.includes('text/event-stream')) {
-        const reader = response.body?.getReader();
-        if (!reader) {
-          throw new Error('Response body is not readable');
-        }
-
-        let fullContent = '';
-        let done = false;
-
-        while (!done) {
-          const { value, done: readerDone } = await reader.read();
-          done = readerDone;
-
-          if (value) {
-            const chunk = new TextDecoder().decode(value);
-            // Process SSE format: data: {"json":"content"}
-            const lines = chunk.split('\n');
-            for (const line of lines) {
-              if (line.startsWith('data:')) {
-                try {
-                  // Extract JSON from the data: prefix
-                  const jsonStr = line.substring(5).trim();
-                  if (jsonStr === '[DONE]') continue;
-                  
-                  const data = JSON.parse(jsonStr);
-                  if (data.choices && data.choices[0] && data.choices[0].delta && data.choices[0].delta.content) {
-                    fullContent += data.choices[0].delta.content;
-                  }
-                } catch (e) {
-                  console.warn('Error parsing SSE chunk:', e);
-                }
-              }
-            }
-          }
-        }
-
-        return {
-          content: fullContent,
-          timestamp: new Date(),
-          metadata: {
-            model: 'qwen/qwen3-32b',
-            processingTime: 0
-          }
-        };
-      } else {
-        // Handle regular JSON response
-        const data = await response.json();
-        return {
-          content: data.content,
-          timestamp: new Date(data.timestamp),
-          metadata: data.metadata
-        };
-      }
+      const data = await response.json();
+      return {
+        content: data.content,
+        timestamp: new Date(),
+        metadata: data.metadata
+      };
     } catch (error) {
       if (error instanceof OrphionAIError) {
         throw error;
@@ -275,6 +243,8 @@ export class OrphionAIService {
       );
     }
   }
+
+  // summarizeSearch removed and replaced by hidden searchContext passthrough to chat
 
   // Method to analyze image and get chat-ready response
   async analyzeImage(imageFile: File, userMessage?: string): Promise<{ response: string; timestamp: Date }> {
@@ -431,24 +401,18 @@ export class OrphionAIService {
     }
   }
 
-  async searchWeb(query: string): Promise<{
-    answer: string
-    sources: Array<{
-      title: string
-      url: string
-      content: string
-      score: number
-      published_date?: string | null
-    }>
-    query: string
-  }> {
+
+
+  // Method to send message with automatic web search integration
+  async sendMessageWithSearch(message: string, conversationHistory: Array<{role: string, content: string}> = []): Promise<OrphionAIResponse> {
     try {
-      const response = await fetch('/api/ai/tavily-search', {
+      const response = await fetch(`${this.baseUrl}/chat`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ query })
+        headers: this.getHeaders(),
+        body: JSON.stringify({
+          message,
+          conversationHistory
+        })
       })
 
       if (!response.ok) {
@@ -458,17 +422,111 @@ export class OrphionAIService {
 
       const data = await response.json()
       return {
-        answer: data.answer,
-        sources: data.sources,
-        query: data.query
+        content: data.content,
+        timestamp: new Date(data.timestamp),
+        metadata: data.metadata
       }
     } catch (error) {
-      console.error('Web search error:', error);
+      if (error instanceof OrphionAIError) {
+        throw error;
+      }
+      console.error('Gemini API Error with Search:', error)
       throw new OrphionAIError(
-        error instanceof Error ? error.message : 'Web search failed',
-        'SEARCH_ERROR',
+        error instanceof Error ? error.message : 'Unknown error occurred',
+        'SEND_MESSAGE_WITH_SEARCH_ERROR',
         new Date()
       )
+    }
+  }
+
+  // Method to stream message with context
+  async streamMessage(message: string, conversationHistory: Array<{role: string, content: string}>, onChunk: (chunk: any) => void, model?: string, searchContext?: {
+    query: string
+    answer?: string
+    sources: Array<{ title: string; url: string; content: string; score?: number; published_date?: string | null }>
+    images?: Array<{ url: string; title?: string; alt?: string }>
+  }): Promise<OrphionAIResponse> {
+    try {
+      const response = await fetch(`${this.baseUrl}/chat`, {
+        method: 'POST',
+        headers: this.getHeaders(),
+        body: JSON.stringify({
+          message,
+          conversationHistory,
+          stream: true,
+          ...(model ? { model } : {}),
+          ...(searchContext ? { searchContext } : {})
+        })
+      })
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        this.handleApiError(response.status, errorText);
+      }
+
+      if (!response.body) {
+        throw new OrphionAIError('No response body', 'STREAM_ERROR', new Date());
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let fullContent = '';
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          
+          if (done) break;
+          
+          const chunk = decoder.decode(value, { stream: true });
+          const lines = chunk.split('\n');
+          
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              try {
+                const data = JSON.parse(line.slice(6));
+                
+                if (data.type === 'chunk') {
+                  onChunk(data);
+                  fullContent += data.content;
+                } else if (data.type === 'complete') {
+                  return {
+                    content: fullContent,
+                    timestamp: new Date(data.timestamp),
+                    metadata: data.metadata
+                  };
+                } else if (data.type === 'error') {
+                  throw new OrphionAIError(data.error || 'Streaming error', 'STREAM_ERROR', new Date());
+                }
+              } catch (parseError) {
+                // Skip invalid JSON lines
+                continue;
+              }
+            }
+          }
+        }
+      } finally {
+        reader.releaseLock();
+      }
+
+      return {
+        content: fullContent,
+        timestamp: new Date(),
+        metadata: {
+          model: 'gemini-2.5-flash',
+          processingTime: 0
+        }
+      };
+    } catch (error) {
+      if (error instanceof OrphionAIError) {
+        throw error;
+      }
+      console.error('Streaming Error:', error);
+      throw new OrphionAIError(
+        error instanceof Error ? error.message : 'Streaming failed',
+        'STREAM_ERROR',
+        new Date()
+      );
     }
   }
 }

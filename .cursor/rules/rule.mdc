@@ -1,0 +1,9 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+You must always make sure that for creating a new component you must follow the styles that this project uses
+
+
+You must always make sure that this project will be heavily updated overtime, so you have to make a proper modular codebase.

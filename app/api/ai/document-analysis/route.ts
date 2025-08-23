@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import mammoth from 'mammoth'
+import { getAPIKey } from '@/lib/api-keys'
 
 export async function POST(request: NextRequest) {
   try {
@@ -56,11 +57,10 @@ export async function POST(request: NextRequest) {
     console.log('✅ Document text extraction completed')
 
     // Step 2: Gemini processes the document text and user message
-    console.log('🤖 Step 2: Gemini processing document...')
-    
-    // Get API key from request headers (sent from client)
-    const geminiApiKey = request.headers.get('x-gemini-api-key')
-    
+    console.log('🤖 Step 2: Gemini processing data...')
+
+    // Get API key from environment variables
+    const geminiApiKey = getAPIKey('gemini')
     if (!geminiApiKey) {
       return NextResponse.json(
         { error: 'Gemini API key is required' },
