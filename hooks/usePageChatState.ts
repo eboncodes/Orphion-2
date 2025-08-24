@@ -1,18 +1,17 @@
-import { useState, useCallback, useEffect } from "react";
-import { generateUniqueId } from "@/lib/utils";
-import { pagesAIService } from "@/app/services/PagesAIService";
-import { useFileAnalysis } from "./useFileAnalysis";
+import { useState, useCallback, useEffect, useRef } from 'react'
+import { generateUniqueId } from '@/lib/utils'
+import { pagesAIService } from '@/app/services/PagesAIService'
 import { 
   PageConversation, 
   PageMessage, 
   createPageConversation, 
   getPageConversation, 
-  updatePageConversation, 
   addMessageToPageConversation,
   updateMessageInPageConversation
-} from "@/lib/page-storage";
-import { useRouter, useSearchParams } from "next/navigation";
+} from '@/lib/page-storage'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { getAPIKey } from '@/lib/api-keys';
+import { fileProcessingManager } from '@/lib/file-processing-utils'
 
 export function usePageChatState(
   onPageContentGenerated?: (pageContent: string) => void,
@@ -39,9 +38,6 @@ export function usePageChatState(
 
   const [isAutoSending, setIsAutoSending] = useState(false);
   
-  // Use the existing file analysis functionality
-  const { analyzeFile, isAnalyzingImage, isProcessingDocument } = useFileAnalysis();
-
   // Load existing page conversation on mount
   useEffect(() => {
     if (pageId) {
@@ -124,8 +120,16 @@ export function usePageChatState(
     if (attachedFile && attachedFile.file) {
       console.log('Analyzing attached file:', attachedFile.file.name, 'Type:', attachedFile.type);
       try {
-        fileAnalysis = await analyzeFile(attachedFile.file, contentToSend || 'Please analyze this file and provide relevant information.');
-        console.log('File analysis result:', fileAnalysis);
+        // Check if file has already been processed
+        const processedContent = fileProcessingManager.getProcessedContent(attachedFile.file)
+        
+        if (processedContent) {
+          console.log('Using cached file analysis for:', attachedFile.file.name)
+          fileAnalysis = processedContent.content
+        } else {
+          console.log('No cached content found for file:', attachedFile.file.name)
+          throw new Error('File has not been processed yet. Please wait for file processing to complete.')
+        }
       } catch (error) {
         console.error('Error analyzing file:', error);
         fileAnalysis = `Error analyzing file: ${error instanceof Error ? error.message : 'Unknown error'}`;
@@ -261,18 +265,15 @@ export function usePageChatState(
           };
           setMessages(prevMessages => [...prevMessages, pageContentMessage]);
           addMessageToPageConversation(pageToUse!.id, pageContentMessage);
-          updatePageConversation(pageToUse!.id, { pageContent });
           if (onTitleChange && pageContent) {
             const titleMatch = pageContent.match(/^#\s+(.+)$/m);
             if (titleMatch) {
               const generatedTitle = titleMatch[1].trim();
               onTitleChange(generatedTitle);
-              updatePageConversation(pageToUse!.id, { title: generatedTitle });
             } else {
               const firstWords = pageContent.replace(/[#*`]/g, '').trim().split(/\s+/).slice(0, 4).join(' ');
               if (firstWords.length > 3) {
                 onTitleChange(firstWords);
-                updatePageConversation(pageToUse!.id, { title: firstWords });
               }
             }
           }
@@ -338,19 +339,18 @@ export function usePageChatState(
   };
 
   return {
-    currentPage,
     messages,
-    message,
-    isLoading,
+    currentPage,
     attachedFile,
-    isAnalyzingImage,
-    isProcessingDocument,
-
-    handleTextareaChange,
-    handleKeyDown,
+    setAttachedFile,
     handleSendMessage,
     handleFileUpload,
     handleRemoveFile,
-    getPlaceholderText
-  };
+    isLoading,
+    setIsLoading,
+    content: message,
+    setContent: setMessage,
+    isAutoSending,
+    setIsAutoSending
+  }
 }

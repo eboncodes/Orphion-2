@@ -2,10 +2,11 @@
 
 import { forwardRef, useEffect, useState, useRef } from "react"
 import { Button } from "@/components/ui/button"
-import { Mic, ArrowUp, MicOff, X, Loader2, Feather, Globe } from "lucide-react"
+import { Mic, ArrowUp, MicOff, X, Loader2, Feather, Globe, Monitor } from "lucide-react"
 import { Spinner } from "@/components/ui/spinner"
 import Tooltip from "@/components/ui/tooltip"
 import FileAttachment from '../features/ImageAttachment'
+import FileAttachmentDisplay from './FileAttachmentDisplay'
 import { useSpeechToText } from '@/hooks/useSpeechToText'
 import { useAuth } from '@/contexts/AuthContext'
 import TypingAnimation from '../utils/TypingAnimation'
@@ -201,7 +202,7 @@ const MessageInput = forwardRef<HTMLTextAreaElement, MessageInputProps>(({
         textarea.style.overflowY = "hidden"
       }
     }
-  }, [value, ref])
+  }, [value, ref, attachedFile])
 
   // Handle voice input
   useEffect(() => {
@@ -219,12 +220,12 @@ const MessageInput = forwardRef<HTMLTextAreaElement, MessageInputProps>(({
     }
   }, [error])
 
-  // Hide typing animation when user starts typing
+  // Hide typing animation when user starts typing or when file is attached
   useEffect(() => {
-    if (value.length > 0) {
+    if (value.length > 0 || attachedFile) {
       setShowTypingAnimation(false)
     }
-  }, [value])
+  }, [value, attachedFile])
 
   // Close tools dropdown on outside click or Escape key
   useEffect(() => {
@@ -321,12 +322,14 @@ const MessageInput = forwardRef<HTMLTextAreaElement, MessageInputProps>(({
     }
   }
 
+
+
   return (
     <>
       <div className="relative">
         {/* Message Input Box */}
       <div
-        className={`relative bg-white rounded-[24px] p-4 transition-all duration-300 ease-in-out shadow-lg ${
+        className={`relative bg-white rounded-[20px] sm:rounded-[24px] p-3 sm:p-4 transition-all duration-300 ease-in-out shadow-lg ${
           isDragOver
             ? 'shadow-xl'
             : 'shadow-lg'
@@ -338,49 +341,66 @@ const MessageInput = forwardRef<HTMLTextAreaElement, MessageInputProps>(({
         onDrop={handleDrop}
       >
         <div className="relative">
-
-
-          <textarea
-            ref={ref}
-            value={value}
-            onChange={onChange}
-            onPaste={handlePaste}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey && (value.trim() || attachedFile)) {
-                e.preventDefault()
-                if (isAuthenticated) {
-                  onKeyDown(e)
-                } else {
-                  setShowSignInModal(true)
-                }
-              } else {
-                onKeyDown(e)
-              }
-            }}
-            placeholder=""
-            className="w-full border-0 bg-transparent text-base focus-visible:ring-0 focus-visible:ring-offset-0 resize-none outline-none min-h-[24px] max-h-[144px] leading-6"
-            rows={1}
-          />
-          {!value && showTypingAnimation && placeholder === "Give Orphion a task to work on" && (
-            <div className="absolute top-0 left-0 pointer-events-none text-gray-500">
-              <TypingAnimation 
-                text="Give Orphion a task to work on" 
-                speed={25}
-                showOnce={true}
+          {/* File Attachment Display */}
+          {attachedFile && (
+            <div className="flex justify-start">
+              <FileAttachmentDisplay
+                attachedFile={attachedFile}
+                isAnalyzingImage={isAnalyzingImage}
+                isProcessingDocument={isProcessingDocument}
+                onRemoveFile={onRemoveFile}
               />
             </div>
           )}
-          {!value && (!showTypingAnimation || placeholder !== "Give Orphion a task to work on") && (
-            <div className="absolute top-0 left-0 pointer-events-none text-gray-500">
-              {placeholder}
-            </div>
-          )}
+
+          <div className="relative">
+            <textarea
+              ref={ref}
+              value={value}
+              onChange={onChange}
+              onPaste={handlePaste}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey && (value.trim() || attachedFile)) {
+                  e.preventDefault()
+                  if (isAuthenticated) {
+                    onKeyDown(e)
+                  } else {
+                    setShowSignInModal(true)
+                  }
+                } else {
+                  onKeyDown(e)
+                }
+              }}
+              placeholder=""
+              className={`w-full border-0 bg-transparent text-sm sm:text-base focus-visible:ring-0 focus-visible:ring-offset-0 resize-none outline-none min-h-[20px] sm:min-h-[24px] max-h-[144px] leading-6`}
+              rows={1}
+            />
+            {!value && !attachedFile && showTypingAnimation && placeholder === "Give Orphion a task to work on" && (
+              <div className="absolute top-0 left-0 pointer-events-none text-gray-500 z-10">
+                <TypingAnimation 
+                  text="Give Orphion a task to work on" 
+                  speed={25}
+                  showOnce={true}
+                />
+              </div>
+            )}
+            {!value && !attachedFile && (!showTypingAnimation || placeholder !== "Give Orphion a task to work on") && (
+              <div className="absolute top-0 left-0 pointer-events-none text-gray-500 z-10">
+                {placeholder}
+              </div>
+            )}
+            {!value && attachedFile && (
+              <div className="absolute top-0 left-0 pointer-events-none text-gray-500 z-10">
+                Assign a task or ask anything
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Bottom Icons */}
-        <div className="flex items-center justify-between mt-3">
-          <div className="flex items-center space-x-4">
-            {showFileAttachment && (
+        <div className="flex items-center justify-between mt-2 sm:mt-3">
+          <div className="flex items-center space-x-2 sm:space-x-4">
+            {showFileAttachment && !attachedFile && (
               <FileAttachment
                 attachedFile={attachedFile}
                 isAnalyzingImage={isAnalyzingImage}
@@ -397,28 +417,32 @@ const MessageInput = forwardRef<HTMLTextAreaElement, MessageInputProps>(({
                   </div>
                 </Tooltip>
                 {showToolsDropdown && (
-                  <div className="absolute bottom-full mb-2 w-56 bg-white border border-gray-200 rounded-xl shadow-lg p-2 z-10">
+                  <div className="absolute bottom-full mb-2 w-48 sm:w-56 bg-white border border-gray-200 rounded-xl shadow-lg p-2 z-10">
 
                     <button
                       onClick={() => handleToolSelection('study')}
                       className="w-full flex items-center space-x-2 px-3 py-2 text-sm hover:bg-gray-50 rounded-md transition-colors"
                     >
-                      {getToolIcon('study')}
-                      <span>Study</span>
+                      <Feather className="w-4 h-4 text-gray-600" />
+                      <span className="text-gray-700">Study</span>
                     </button>
                     <button
                       onClick={() => handleToolSelection('image')}
                       className="w-full flex items-center space-x-2 px-3 py-2 text-sm hover:bg-gray-50 rounded-md transition-colors"
                     >
-                      {getToolIcon('image')}
-                      <span>Image</span>
+                      <svg className="w-4 h-4 text-gray-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <rect x="3" y="3" width="18" height="14" rx="2" ry="2"></rect>
+                        <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                        <path d="M21 15l-5-5L5 21"></path>
+                      </svg>
+                      <span className="text-gray-700">Image</span>
                     </button>
                     <button
                       onClick={() => handleToolSelection('search')}
                       className="w-full flex items-center space-x-2 px-3 py-2 text-sm hover:bg-gray-50 rounded-md transition-colors"
                     >
-                      {getToolIcon('search')}
-                      <span>Web Search</span>
+                      <Globe className="w-4 h-4 text-gray-600" />
+                      <span className="text-gray-700">Web Search</span>
                     </button>
                     
                   </div>
@@ -445,7 +469,7 @@ const MessageInput = forwardRef<HTMLTextAreaElement, MessageInputProps>(({
             )}
           </div>
 
-          <div className="flex items-center space-x-3">
+          <div className="flex items-center space-x-2 sm:space-x-3">
             {showVoiceError && (
               <div className="absolute bottom-full right-0 mb-2 px-3 py-1 bg-red-500 text-white text-xs rounded-lg">
                 {error}
@@ -455,7 +479,7 @@ const MessageInput = forwardRef<HTMLTextAreaElement, MessageInputProps>(({
             {/* Dynamic Button - Microphone when empty, Send when typed */}
             <Button
               size="sm"
-              className={`rounded-full w-8 h-8 p-0 transition-all duration-200 ${
+              className={`rounded-full w-7 h-7 sm:w-8 sm:h-8 p-0 transition-all duration-200 ${
                 value.trim() || attachedFile
                   ? isLoading
                     ? 'bg-gradient-to-br from-gray-200 to-gray-400 cursor-not-allowed'
@@ -479,13 +503,13 @@ const MessageInput = forwardRef<HTMLTextAreaElement, MessageInputProps>(({
               }
             >
               {isLoading ? (
-                <Loader2 className="w-4 h-4 text-white animate-spin" />
+                <Loader2 className="w-3 h-3 sm:w-4 sm:h-4 text-white animate-spin" />
               ) : value.trim() || attachedFile ? (
-                <ArrowUp className="w-4 h-4 text-white" />
+                <ArrowUp className="w-3 h-3 sm:w-4 sm:h-4 text-white" />
               ) : isListening ? (
-                <MicOff className="w-4 h-4 text-red-500" />
+                <MicOff className="w-3 h-3 sm:w-4 sm:h-4 text-red-500" />
               ) : (
-                <Mic className="w-4 h-4 text-gray-600" />
+                <Mic className="w-3 h-3 sm:w-4 sm:h-4 text-gray-600" />
               )}
             </Button>
           </div>
