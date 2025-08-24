@@ -9,7 +9,6 @@ import { useMessageBubble } from './hooks/useMessageBubble'
 import AttachedFile from './components/AttachedFile'
 import FadeInImage from './components/FadeInImage'
 import MessageContent from './components/MessageContent'
-import ImagePopup from './components/ImagePopup'
 // SearchResults now renders under the SearchRequestPill inside MessageContent
 import PageContentPill from '../../pages/PageContentPill'
 import ThinkingLoader from '../chat/ThinkingLoader'
@@ -41,11 +40,7 @@ export default function MessageBubble({
   const {
     isThinkingOpen,
     setIsThinkingOpen,
-    isImagePopupOpen,
-    setIsImagePopupOpen,
-    isImagePopupClosing,
     isModalOpen,
-    selectedImageIndex,
     extractThinkingContent,
     handleImagePopupClose,
     openImagePopup
@@ -134,14 +129,6 @@ export default function MessageBubble({
           {/* Search results are handled in MessageContent under the search pill */}
 
       {/* Image popup viewer */}
-      <ImagePopup
-        isOpen={isImagePopupOpen}
-        onClose={handleImagePopupClose}
-        imageSrc={Array.isArray(message.generatedImages) && message.generatedImages[selectedImageIndex]?.src || ''}
-        alt={Array.isArray(message.generatedImages) && (message.generatedImages[selectedImageIndex]?.alt || 'Generated image')}
-      />
-          
-          {/* Debug logs removed to avoid rendering void ReactNodes */}
         </div>
 
         {/* Timestamp - Only show for AI messages with fade-in effect on hover */}

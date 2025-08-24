@@ -5,7 +5,6 @@ import { renderFormattedContent } from '../../utils/KaTeXRenderer'
 
 import SearchRequestPill from '../../pills/SearchRequestPill'
 import ThinkingLoader from '../../chat/ThinkingLoader'
-import CodeExecutionPill from '../../pills/CodeExecutionPill'
 import TextFilePill from '../../pills/TextFilePill'
 import TaskCreationPill from '../../pills/TaskCreationPill'
 import PageCreationPill from '../../pills/PageCreationPill'
@@ -54,8 +53,7 @@ export default function MessageContent({
   const safeDisplayContent = ensureStringContent(displayContent)
   // Separate expansion states for single-search and multi-search items
   const [isSingleSearchExpanded, setIsSingleSearchExpanded] = useState(false)
-  const [multiSearchExpanded, setMultiSearchExpanded] = useState<Record<number, boolean>>({})
-  
+  const [multiSearchExpanded, setMultiSearchExpanded] = useState<{ [key: number]: boolean }>({}); // Keep as object for individual toggling
   // Extract executable code if available
   const executableCode = message.executableCode;
   const generatedImages = (message as any).generatedImages as Array<{ src: string; alt?: string }> | undefined
@@ -251,7 +249,7 @@ export default function MessageContent({
             searchQuery={message.searchRequest}
             isSearching={!message.searchCompleted}
             isCompleted={message.searchCompleted || false}
-            isExpanded={isSingleSearchExpanded}
+            isExpanded={message.searchCompleted || false} // Automatically expand when completed
             onToggle={() => setIsSingleSearchExpanded(prev => !prev)}
           />
           {message.searchCompleted && message.searchResults && isSingleSearchExpanded && (
@@ -285,7 +283,7 @@ export default function MessageContent({
                 searchQuery={s.query}
                 isSearching={!s.completed}
                 isCompleted={!!s.completed}
-                isExpanded={!!multiSearchExpanded[idx]}
+                isExpanded={!!multiSearchExpanded[idx] || false} // Keep manual toggle for multi-search
                 onToggle={() => setMultiSearchExpanded(prev => ({ ...prev, [idx]: !prev[idx] }))}
               />
               {s.completed && s.results && !!multiSearchExpanded[idx] && (
@@ -299,31 +297,6 @@ export default function MessageContent({
               )}
             </div>
           ))}
-        </div>
-      )}
-
-      {/* Code Execution Pill */}
-      {message.sender === 'ai' && executableCode && (
-        <div className="mt-3">
-          <CodeExecutionPill
-            code={executableCode.code}
-            language={executableCode.language}
-            isExecuting={!!message.codeExecuting && !message.codeExecuted}
-            isCompleted={!!message.codeExecuted}
-            isExpanded={isCodeExpanded}
-            onToggle={() => setIsCodeExpanded(prev => !prev)}
-          />
-          {message.codeExecuted && isCodeExpanded && (
-            <div className="mt-3">
-              <MonacoEditor
-                code={executableCode.code}
-                language={executableCode.language}
-                height="300px"
-                readOnly={true}
-                showActions={true}
-              />
-            </div>
-          )}
         </div>
       )}
 

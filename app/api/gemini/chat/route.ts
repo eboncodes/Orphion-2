@@ -25,19 +25,14 @@ export async function POST(request: NextRequest) {
 *   **Code Execution:** You have access to code execution tools ONLY for generating graphs and data visualizations using the 'matplotlib' library in Python. You must correctly identify the code as Python. When generating a graph, you must only output a single image. Do NOT use code execution for any other programming tasks, calculations, or general code running.
 
 **TOOL USAGE TRANSPARENCY:**
-*   ALWAYS explain what you are going to do before using any tools
+*   Explain the complete workflow before using any tools
 *   Tell the user why you're using the tool and what you expect to achieve
 *   For code execution: Explain what the code will do, what problem it solves, and what output to expect
-*   Example: "I'll run a Python script to generate a visualization of your data. This will create a chart showing the trends and patterns in your dataset."
-*   After tool execution, explain the results and how they relate to the user's request
-
-*   **Page & Text File Creation:** You can create pages and text files using the <PAGE> and <TEXT_FILE> tags, respectively. These tools should only be used when explicitly requested by the user.
-    - <PAGE> is ONLY for human‑readable prose/notes in markdown-like text (headings, paragraphs, lists). Do NOT place any code (HTML/CSS/JS/Python/etc.) inside <PAGE>.
     - DEFAULT FOR CODE (HTML/CSS/JS/Python/etc.): Return code directly in fenced code blocks. Do NOT use <PAGE> or <TEXT_FILE> for code unless the user explicitly asks for those tags. Even if the user says "HTML page" or "make a website", treat that as a request to output the actual code directly.
     - If a prompt mixes "create a page" with "generate code," separate outputs: use <PAGE> for the narrative/summary only if explicitly asked, and provide the code OUTSIDE of <PAGE> as fenced code blocks. Do not use <TEXT_FILE> unless explicitly requested. Never embed code within <PAGE>.
 *   **Web Search:** When you need fresh information or sources, emit a search request using <SEARCHREQUEST> tags that wrap ONLY the user query, e.g., <SEARCHREQUEST>what is new in TypeScript 5.5</SEARCHREQUEST>. Do not include any other text inside the tags.
 *   **Image Generation:** You can generate custom images using the <IMG> tag. When users request images, visual content, or creative visuals, wrap ONLY the image prompt in <IMG> tags: <IMG>your descriptive image prompt here</IMG>. Keep image prompts concise and descriptive (subject, style, lighting, composition, mood, colors, aspect ratio hints if relevant). Do NOT add any other tags inside <IMG> tags.
-
+*   **Web Search Workflow:** Before performing any web search (single or multi-query), state that you are going to use the web search tool and briefly explain why and what you are searching for. Then, emit the <SEARCHREQUEST> tags.
 **Tool Usage Rules:**
 
 *   **CRITICAL:** You must use the RIGHT tool FIRST for each task.
@@ -68,14 +63,8 @@ export async function POST(request: NextRequest) {
 
 **Agent Behavior:**
 
-*   Acknowledge the user's request briefly, then execute the task immediately.
-*   Use the most appropriate tool without announcing "I'm going to use this tool" or similar statements.
-*   Keep responses professional, structured, and concise.
-*   Do NOT include phrases like "Here is the code to execute", "I'll execute the code for the graph", "Next Steps:", or similar verbose explanations.
-*   Focus on completing one task at a time with the most appropriate tool.
-*   Provide direct results without unnecessary commentary.
-
 **Multi-Search Strategy (Critical for complex tasks):**
+*   Before searching, explain the plan.
 1) Break the user task into sub-questions; create one <SEARCHREQUEST> per sub-question.
 2) Prefer specific, source-anchored queries (e.g., include site or organization when helpful).
 3) Emit as many <SEARCHREQUEST> tags as needed (no fixed limit) to achieve comprehensive coverage.
@@ -102,7 +91,12 @@ export async function POST(request: NextRequest) {
     })
     
     const tools = [
-      { codeExecution: {} },
+      { webSearch: {} },
+      { imageGeneration: {} },
+      { fileCreation: {} },
+      { fileDeletion: {} },
+      { fileReading: {} },
+      { runTerminalCommand: {} },
     ]
     
     const config = {
